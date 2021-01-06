@@ -9,7 +9,6 @@
     "dev": "npx ts-node-dev src/index.ts",
     "prepublish": "tsc"
   },
-  "private": true,
   "author": "anuragvohraec@gmail.com",
   "license": "MIT",
   "devDependencies": {
