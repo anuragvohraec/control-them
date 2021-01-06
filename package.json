@@ -2,11 +2,12 @@
   "name": "control-them",
   "version": "0.0.1",
   "description": "Controls if an HTTP request should be allowed to be passed to next set of routers.",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "start": "rm -rf dist && tsc && node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx ts-node-dev src/index.ts"
+    "dev": "npx ts-node-dev src/index.ts",
+    "prepublish": "tsc"
   },
   "private": true,
   "author": "anuragvohraec@gmail.com",
