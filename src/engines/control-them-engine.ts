@@ -38,7 +38,7 @@ import { Compass, PathDirection } from "./compass";
                         const req_query_param_length=req.query?Object.keys(req.query).length:0;
                         const mp_query_param_length=methodPermissions.query_param?Object.keys(methodPermissions.query_param).length:0;
                         if(mp_query_param_length!==req_query_param_length){
-                            return res.status(400).send({error:`This url expects ${mp_query_param_length} query parameters and request has ${req_query_param_length}`});
+                            return res.status(400).send({error:`This url expects ${mp_query_param_length} query parameters ${methodPermissions.query_param?Object.keys(methodPermissions.query_param):""} and request has ${req_query_param_length}`});
                         }
                         if(methodPermissions.query_param){
                             //this means both has same number of query params
@@ -47,7 +47,8 @@ import { Compass, PathDirection } from "./compass";
                                 if(!condition){
                                     return res.status(400).send({error:`This url expects ${Object.keys(methodPermissions.query_param)} query parameters`}); 
                                 }else{
-                                    if(!Utils.checkIfValuePassesConditions(req.query[q],condition)){
+                                    const passed_check = Utils.checkIfValuePassesConditions(req.query[q],condition);
+                                    if(!passed_check){
                                         return res.status(400).send({error:`Query param ${q} value should be ${JSON.stringify(condition)}`}); 
                                     }
                                 }
@@ -62,10 +63,16 @@ import { Compass, PathDirection } from "./compass";
                             const condition:Condition = combined_headers[h];
                             const req_header_value=req.headers[h];
                             if(!req_header_value){
-                                return res.status(400).send({error:`Not all request headers supplied ${h_keys}`}); 
+                                return res.status(400).send({error:`Not all request headers supplied: ${h_keys}`}); 
                             }else{
                                 if(!Utils.checkIfValuePassesConditions(req_header_value,condition)){
-                                    return res.status(400).send({error:`Header ${h} value should be ${JSON.stringify(condition)}`}); 
+                                    const op = Object.keys(condition)[0];
+                                    let c = JSON.stringify(condition);
+                                    if(op === "$regex"){
+                                        //@ts-ignore
+                                        c=`{$regex: ${condition[op].toString()}}`;
+                                    }
+                                    return res.status(400).send({error:`Header ${h} value should be ${c}`}); 
                                 }
                             }
                         }

@@ -29,7 +29,7 @@ export class Utils {
                 break;
             }
             case "$eq":{
-                if(value===opValue){
+                if(value==opValue){
                     return true;
                 }
                 break;
@@ -80,19 +80,30 @@ export class Utils {
             }
             case "$regex":{
                 if(opValueType==="regexp"){
-                    return (opValue as RegExp).test(value);
+                    return opValue.test(value);
                 }
                 break;
             }
             case "$in":{
                 if(opValueType==="array"){
-                    return opValueType.includes(value);
+                    for(let ov of opValue){
+                        //yes ==
+                        if(ov==value){
+                            return true;
+                        }
+                    }
                 }
                 break;
             }
             case "$nin":{
                 if(opValueType==="array"){
-                    return !opValueType.includes(value);
+                    for(let ov of opValue){
+                        //yes ==
+                        if(ov==value){
+                            return false;
+                        }
+                    }
+                    return true;
                 }
                 break;
             }
