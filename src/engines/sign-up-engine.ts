@@ -1,7 +1,8 @@
 import { Router, json,Request , Response} from "express";
 import * as svgCaptcha from 'svg-captcha';
 import * as jwt from 'jsonwebtoken';
-import { FlattenObject, Utils } from "../../dist";
+import { Utils } from "../utils";
+import {FlattenObject} from '../interfaces';
 
 interface SaltedData{
     [key:string]:string;
@@ -113,10 +114,6 @@ export interface SignUpFormData{
 
 export interface OTP extends FlattenObject{
     /**
-     * otp
-     */
-    otp:string;
-    /**
      * Generally the user id created
      */
     _id:string;
@@ -173,7 +170,7 @@ export class SignMeUpEngine{
     private router!: Router;
     private signMeUpConfig:  SignMeUpConfig;
 
-    private ALGORITHM:jwt.Algorithm="RS256";
+    //private ALGORITHM:jwt.Algorithm="RS256";
     private captcha_session:FlattenObject={};
     private captcha_verified:number=0;
 
@@ -186,14 +183,14 @@ export class SignMeUpEngine{
      * @param signUpFormSubmitFunction this submits the form and gives a authentication token object, which is than converted to JWT by SignMeUpEngine. This function is also tasked with sending OTP to user, via which ever channel.
      * @param config : A default set of config is used if not provided.
      */
-    constructor(private CAPTCHA_TOKEN_SECRET:string, private OTP_TOKEN_SECRET:string,private AUTH_TOKEN_SECRET:string, private captcha_text_key:string, private signUpAndReturnOTPTokenObjectFunction: SignUpAndReturnOTPTokenObjectFunction, private verifyOTPAndReturnAuthTokenObjectFunction:VerifyOTPAndReturnAuthTokenObjectFunction , config?:SignMeUpConfig){
+    constructor(private CAPTCHA_TOKEN_SECRET:string, private OTP_TOKEN_SECRET:string,private AUTH_TOKEN_SECRET:string, private captcha_text_key:string,private otp_text_key:string, private signUpAndReturnOTPTokenObjectFunction: SignUpAndReturnOTPTokenObjectFunction, private verifyOTPAndReturnAuthTokenObjectFunction:VerifyOTPAndReturnAuthTokenObjectFunction , config?:SignMeUpConfig){
         if(CAPTCHA_TOKEN_SECRET.length!==256 || OTP_TOKEN_SECRET.length!==256 ||  AUTH_TOKEN_SECRET.length!==256){
             throw `Token secret must be of length 256`;
         }
 
         const defaultConfig: SignMeUpConfig={
             rando:new Rando(),
-            captcha_expiry: 60,
+            captcha_expiry: 60*4,
             captcha_noise:4,
             salt_range_length:{max:10,min:5},
             captcha_text_length:5,
@@ -222,11 +219,9 @@ export class SignMeUpEngine{
                 }else{
                     if(typeof cap_header === "string"){
                         //verify the token and than we will parse the request for sign up form
-                        const captcha_token_sent = await new Promise<SaltedData>(res=>{
+                        const captcha_token_sent = await new Promise<SaltedData|undefined>(res=>{
                             try{
-                                jwt.verify(cap_header,this.CAPTCHA_TOKEN_SECRET,{
-                                    algorithms: [this.ALGORITHM],
-                                },(e,token)=>{
+                                jwt.verify(cap_header,this.CAPTCHA_TOKEN_SECRET,(e,token)=>{
                                     if(e){
                                         res(undefined);
                                     }else{
@@ -279,10 +274,9 @@ export class SignMeUpEngine{
                     //we will submit the form here
                     const otp_token = await this.signUpAndReturnOTPTokenObjectFunction(req.body, req);
                     if(otp_token){
-                        const otp_token_str = await new Promise<string>(res=>{
+                        const otp_token_str = await new Promise<string|undefined>(res=>{
                             try{
                                 jwt.sign(otp_token,this.OTP_TOKEN_SECRET,{
-                                    algorithm:this.ALGORITHM,
                                     expiresIn: this.signMeUpConfig.otp_token_expiry
                                 },(e,token)=>{
                                     if(e){
@@ -321,11 +315,9 @@ export class SignMeUpEngine{
                 }else{
                     if(typeof otp_header === "string"){
                         //verify the token and than we will parse the request for sign up form
-                        const OTP_token_sent = await new Promise<OTP>(res=>{
+                        const OTP_token_sent = await new Promise<OTP|undefined>(res=>{
                             try{
-                                jwt.verify(otp_header,this.OTP_TOKEN_SECRET,{
-                                    algorithms: [this.ALGORITHM],
-                                },(e,token)=>{
+                                jwt.verify(otp_header,this.OTP_TOKEN_SECRET,(e,token)=>{
                                     if(e){
                                         res(undefined);
                                     }else{
@@ -359,16 +351,15 @@ export class SignMeUpEngine{
                 //here we will verify if the captcha text supplied is correct or not.
                 const otp_token:OTP = (req as any).otp_sent;
                 const otp_in_form = req.body["otp"];
-                if(otp_in_form!==otp_token.otp){
+                if(otp_in_form!==otp_token[this.otp_text_key]){
                     return res.sendStatus(401);
                 }else{
                     //we will submit the form here
                     const auth_token = await this.verifyOTPAndReturnAuthTokenObjectFunction(otp_token, req);
                     if(auth_token){
-                        const auth_token_str = await new Promise<string>(res=>{
+                        const auth_token_str = await new Promise<string|undefined>(res=>{
                             try{
                                 jwt.sign(auth_token,this.AUTH_TOKEN_SECRET,{
-                                    algorithm:this.ALGORITHM,
                                     expiresIn: this.signMeUpConfig.auth_token_expiry
                                 },(e,token)=>{
                                     if(e){
@@ -419,7 +410,7 @@ export class SignMeUpEngine{
             
             //this check ensure only one auth header can be sent
             const authHeaderType = Utils.toType(auth_header);
-            if(authHeaderType!=="array"){
+            if(authHeaderType==="array"){
                 return res.sendStatus(401);
             }
 
@@ -435,9 +426,10 @@ export class SignMeUpEngine{
                 // captcha_token_data[this.captcha_text_key]=svgData.text;
                 // captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
 
-                const captcha_token=await new Promise<string>((res)=>{
-                    jwt.sign(captcha_token_data,this.CAPTCHA_TOKEN_SECRET,{algorithm:this.ALGORITHM,expiresIn: this.signMeUpConfig.captcha_expiry},(e,token)=>{
+                const captcha_token=await new Promise<string|undefined>((res)=>{
+                    jwt.sign(captcha_token_data,this.CAPTCHA_TOKEN_SECRET,{expiresIn: this.signMeUpConfig.captcha_expiry},(e,token)=>{
                         if(e){
+                            console.error(e);
                             res(undefined);
                         }else{
                             res(token);
@@ -453,11 +445,9 @@ export class SignMeUpEngine{
                     return res.send(svgData.data);
                 }
             }else{
-                const auth_token_data = await new Promise<AUTH_TOKEN>(res=>{
+                const auth_token_data = await new Promise<AUTH_TOKEN|undefined>(res=>{
                     try{
-                        jwt.verify(auth_header,this.AUTH_TOKEN_SECRET,{
-                            algorithms: [this.ALGORITHM],
-                        },(e,token)=>{
+                        jwt.verify(auth_header,this.AUTH_TOKEN_SECRET,(e,token)=>{
                             if(e){
                                 res(undefined);
                             }else{
