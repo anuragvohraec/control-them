@@ -161,9 +161,13 @@ export interface VerifyOTPAndReturnAuthTokenObjectFunction{
  * 1. if a request without **authorization** header is made, than it will respond with SVG captcha, and captcha_token header (to verify the captcha latter).
  * 2. if a valid **authorization** header is given than it will add auth_token_data to request and call next, so that next function in the call stack can use this.
  * 
- * For sign up.
- * O is OTP token object class
- * T is Final authentication token object class
+ * For Sign up
+ * use /sign-me-up url
+ * 
+ * For login too you can use the same url and you can write your signUpAndReturnOTPTokenObjectFunction as such to cater both login and sign up form data
+ * 
+ * For OTP
+ * use /verify-otp
  */
 export class SignMeUpEngine{
     private router!: Router;
