@@ -3,7 +3,7 @@ import * as svgCaptcha from 'svg-captcha';
 import * as jwt from 'jsonwebtoken';
 import { FlattenObject, Utils } from "../../dist";
 
-interface CaptchaData{
+interface SaltedData{
     [key:string]:string;
 }
 
@@ -39,7 +39,7 @@ export interface SignMeUpConfig{
      */
     rando?: Rando;
     /**
-     * Salts are added to captcha token.
+     * Salts are added to captcha/otp token.
      * {
      * "some_random_key1":"some_random_value1",
      * "captcha_text_key":"captcha value",
@@ -48,7 +48,7 @@ export interface SignMeUpConfig{
      * this defines the length of these random keys.
      * default value is : {max:10,min:5}
      */
-    captcha_salt_range_length?:{min:number,max:number};
+    salt_range_length?:{min:number,max:number};
     /**
      * Length of captcha which will be generated. Default: 5
      */
@@ -81,17 +81,29 @@ export interface SignMeUpConfig{
      */
     sign_up_form_data_limit?:number;
     /**
-     * JWT expiry period.
+     * Authentication token expiry period.
      * Eg: 60, "2 days", "10h", "7d". A numeric value is interpreted as a seconds count. If you use a string be sure you provide the time units (days, hours, etc), otherwise milliseconds unit is used by default ("120" is equal to "120ms").
      * default: 120 days
      */
-    jwt_expiry?:string | number | undefined;
+    auth_token_expiry?:string | number | undefined;
+    
+    /**
+     * Otp token expiry period.
+     * Eg: 60, "2 days", "10h", "7d". A numeric value is interpreted as a seconds count. If you use a string be sure you provide the time units (days, hours, etc), otherwise milliseconds unit is used by default ("120" is equal to "120ms").
+     * default: 120
+     */
+    otp_token_expiry?:string | number | undefined;
 
     /**
      * Log in path
      * default: /verify-otp
      */
-    otp_path?:string;
+    verify_otp_path?:string;
+    /**
+     * otp form data limit
+     * default: 100
+     */
+    otp_form_data_limit?:number;
 }
 
 export interface SignUpFormData{
@@ -99,16 +111,49 @@ export interface SignUpFormData{
     [key:string]:any;
 }
 
+export interface OTP extends FlattenObject{
+    /**
+     * otp
+     */
+    otp:string;
+    /**
+     * Generally the user id created
+     */
+    _id:string;
+    /**
+     * Rev of profile after login: This should signify active login and can be used to log from only one machine (keep it changing for each login), and during verification check if its different from the one user have currently.
+     * If its too difficult for you, use login datetime for this.
+     */
+    _rev:string;
+}
+
+
+export interface AUTH_TOKEN extends FlattenObject{
+    /**
+     * Generally the user id created
+     */
+    _id:string;
+    /**
+     * Rev of profile after login: This should signify active login and can be used to log from only one machine (keep it changing for each login), and during verification check if its different from the one user have currently.
+     * If its too difficult for you, use login datetime for this.
+     */
+    _rev:string;
+}
 
 /**
- * If form data is correct, this function should save it in whatever medium they wanted to save it.
- * And generate a token object , info they wanted to be on Json web token.
- * If the form data provide is failed, then this function **must** use response object to send response to user and return undefined as output of this function.
- * However if form data is all good and has been saved, this fuction should not send response to user, instead simply return the authentication token.
- * returns a main authentication token if form data is submitted successfully. 
+ * Checks if form data is correct or not.
+ * If correct its saves it in whatever medium and create a OTP token For example {created_user_id,otp}.
+ * This function is also responsible for sending OTP to user with whichever medium deems fit.
  */
-export interface FormSubmitFunction<K extends FlattenObject>{
-    (form_data:FlattenObject, req:Request, res:Response):Promise<K|undefined>
+export interface SignUpAndReturnOTPTokenObjectFunction{
+    (form_data:FlattenObject, req:Request):Promise<OTP|undefined>
+}
+
+/**
+ * This function is responsible for verifying the OTP and provide a authentication object.
+ */
+export interface VerifyOTPAndReturnAuthTokenObjectFunction{
+    (otp_token:OTP, req:Request):Promise<AUTH_TOKEN|undefined>
 }
 
 /**
@@ -120,7 +165,7 @@ export interface FormSubmitFunction<K extends FlattenObject>{
  * O is OTP token object class
  * T is Final authentication token object class
  */
-export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
+export class SignMeUpEngine{
     private router!: Router;
     private signMeUpConfig:  SignMeUpConfig;
 
@@ -137,7 +182,7 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
      * @param signUpFormSubmitFunction this submits the form and gives a authentication token object, which is than converted to JWT by SignMeUpEngine. This function is also tasked with sending OTP to user, via which ever channel.
      * @param config : A default set of config is used if not provided.
      */
-    constructor(private CAPTCHA_TOKEN_SECRET:string, private OTP_TOKEN_SECRET:string,private AUTH_TOKEN_SECRET:string, private captcha_text_key:string, private signUpFormSubmitFunction: FormSubmitFunction<O>, private verifyOTPSubmitFunction:FormSubmitFunction<T> , config?:SignMeUpConfig){
+    constructor(private CAPTCHA_TOKEN_SECRET:string, private OTP_TOKEN_SECRET:string,private AUTH_TOKEN_SECRET:string, private captcha_text_key:string, private signUpAndReturnOTPTokenObjectFunction: SignUpAndReturnOTPTokenObjectFunction, private verifyOTPAndReturnAuthTokenObjectFunction:VerifyOTPAndReturnAuthTokenObjectFunction , config?:SignMeUpConfig){
         if(CAPTCHA_TOKEN_SECRET.length!==256 || OTP_TOKEN_SECRET.length!==256 ||  AUTH_TOKEN_SECRET.length!==256){
             throw `Token secret must be of length 256`;
         }
@@ -146,38 +191,34 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
             rando:new Rando(),
             captcha_expiry: 60,
             captcha_noise:4,
-            captcha_salt_range_length:{max:10,min:5},
+            salt_range_length:{max:10,min:5},
             captcha_text_length:5,
             max_captcha_session_size: 100000,
             sign_me_up_path:"/sign-me-up",
             sign_up_form_data_limit: 500,
-            jwt_expiry: "120 days",
-            otp_path:"/verify-otp"
+            auth_token_expiry: "120 days",
+            verify_otp_path:"/verify-otp",
+            otp_form_data_limit:100,
+            otp_token_expiry:120
         }
 
         this.signMeUpConfig={...defaultConfig, ...config};
     }
 
-    handle():Router{
-        this.router = Router();
-        try{
-
+    private _signUpFormHandling(){
+        //SIGN UP FORM handling
             //this checks if valid captcha token is present or not , else will reject the request.
             this.router.post(this.signMeUpConfig.sign_me_up_path!,async(req,res,next)=>{
                 //if a request do not contains captcha_token than send 401
                 const cap_header = req.headers[captcha_token_header];
 
                 const capHeaderType = Utils.toType(cap_header);
-                if(capHeaderType==="array"){
-                    return res.sendStatus(401);
-                }
-
-                if(!cap_header){
+                if(capHeaderType==="string"){
                     return res.sendStatus(401);
                 }else{
                     if(typeof cap_header === "string"){
                         //verify the token and than we will parse the request for sign up form
-                        const captcha_token_sent = await new Promise<CaptchaData>(res=>{
+                        const captcha_token_sent = await new Promise<SaltedData>(res=>{
                             try{
                                 jwt.verify(cap_header,this.CAPTCHA_TOKEN_SECRET,{
                                     algorithms: [this.ALGORITHM],
@@ -185,7 +226,7 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
                                     if(e){
                                         res(undefined);
                                     }else{
-                                        res(token as CaptchaData);
+                                        res(token as SaltedData);
                                     }
                                 })
                             }catch(e){
@@ -232,13 +273,13 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
                     return res.sendStatus(401);
                 }else{
                     //we will submit the form here
-                    const otp_token = await this.signUpFormSubmitFunction(req.body, req ,res);
-                    if(otp_token && Object.keys(otp_token).length>0){
+                    const otp_token = await this.signUpAndReturnOTPTokenObjectFunction(req.body, req);
+                    if(otp_token){
                         const otp_token_str = await new Promise<string>(res=>{
                             try{
                                 jwt.sign(otp_token,this.OTP_TOKEN_SECRET,{
                                     algorithm:this.ALGORITHM,
-                                    expiresIn: this.signMeUpConfig.jwt_expiry
+                                    expiresIn: this.signMeUpConfig.otp_token_expiry
                                 },(e,token)=>{
                                     if(e){
                                         res(undefined);
@@ -256,79 +297,106 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
                             res.setHeader(otp_verification_header,otp_token_str);
                             return res.sendStatus(201);
                         }
+                    }else{
+                        return res.sendStatus(401);
                     }
-                    return;
                 }
             });
-            
+    }
 
-            this.router.use("/",async (req,res,next)=>{
-                //check if request has a authorization header, if not than simply return SVG
-                //along with header : captcha_token
-                //captcha_token will be jwt signed data:{salt captcha text, salt}
-                const auth_header = req.headers[authorization_header];
-                
-                //this check ensure only one auth header can be sent
-                const authHeaderType = Utils.toType(auth_header);
-                if(authHeaderType==="array"){
+    private _verifyOTPFormHandling(){
+        //SIGN UP FORM handling
+            //this checks if valid captcha token is present or not , else will reject the request.
+            this.router.post(this.signMeUpConfig.verify_otp_path!,async(req,res,next)=>{
+                //if a request do not contains captcha_token than send 401
+                const otp_header = req.headers[otp_verification_header];
+
+                const otpHeaderType = Utils.toType(otp_header);
+                if(otpHeaderType!=="string"){
                     return res.sendStatus(401);
-                }
-
-                if(!auth_header){
-                    const svgData = svgCaptcha.create({
-                        size: this.signMeUpConfig.captcha_text_length,
-                        noise:this.signMeUpConfig.captcha_noise,
-                        color:false
-                    });
-                    //@ts-ignore
-                    const captcha_token_data:CaptchaData = {}
-                    captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
-                    captcha_token_data[this.captcha_text_key]=svgData.text;
-                    captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
-
-                    const captcha_token=await new Promise<string>((res)=>{
-                        jwt.sign(captcha_token_data,this.CAPTCHA_TOKEN_SECRET,{algorithm:this.ALGORITHM,expiresIn: this.signMeUpConfig.captcha_expiry},(e,token)=>{
-                            if(e){
+                }else{
+                    if(typeof otp_header === "string"){
+                        //verify the token and than we will parse the request for sign up form
+                        const OTP_token_sent = await new Promise<OTP>(res=>{
+                            try{
+                                jwt.verify(otp_header,this.OTP_TOKEN_SECRET,{
+                                    algorithms: [this.ALGORITHM],
+                                },(e,token)=>{
+                                    if(e){
+                                        res(undefined);
+                                    }else{
+                                        res(token as OTP);
+                                    }
+                                })
+                            }catch(e){
                                 res(undefined);
-                            }else{
-                                res(token);
+                            }
+                        });
+                        
+                        if(!OTP_token_sent){
+                            return res.sendStatus(401);    
+                        }else{
+                            const otp = OTP_token_sent;
+
+                            (req as any).otp_sent = otp;
+                            next();
+                        }
+                    }else{
+                        return res.sendStatus(401);
+                    }
+                }
+            });
+
+            this.router.post(this.signMeUpConfig.verify_otp_path!,json({
+                limit: this.signMeUpConfig.otp_form_data_limit
+            }));
+
+            this.router.post(this.signMeUpConfig.verify_otp_path!,async (req,res,next)=>{
+                //here we will verify if the captcha text supplied is correct or not.
+                const otp_token:OTP = (req as any).otp_sent;
+                const otp_in_form = req.body["otp"];
+                if(otp_in_form!==otp_token.otp){
+                    return res.sendStatus(401);
+                }else{
+                    //we will submit the form here
+                    const auth_token = await this.verifyOTPAndReturnAuthTokenObjectFunction(otp_token, req);
+                    if(auth_token){
+                        const auth_token_str = await new Promise<string>(res=>{
+                            try{
+                                jwt.sign(auth_token,this.AUTH_TOKEN_SECRET,{
+                                    algorithm:this.ALGORITHM,
+                                    expiresIn: this.signMeUpConfig.auth_token_expiry
+                                },(e,token)=>{
+                                    if(e){
+                                        res(undefined);
+                                    }else{
+                                        res(token);
+                                    }
+                                });
+                            }catch(e){
+                                res(undefined);
                             }
                         })
-                    });
-                    if(!captcha_token){
-                        console.error("No captcha token created");
-                        return res.sendStatus(500);
-                    }else{
-                        res.contentType("image/svg+xml");
-                        res.setHeader(captcha_token_header,captcha_token);
-                        return res.send(svgData.data);
-                    }
-                }else{
-                    const auth_token_data = await new Promise<T>(res=>{
-                        try{
-                            jwt.verify(auth_header,this.AUTH_TOKEN_SECRET,{
-                                algorithms: [this.ALGORITHM],
-                            },(e,token)=>{
-                                if(e){
-                                    res(undefined);
-                                }else{
-                                    res(token as unknown as T);
-                                }
-                            })
-                        }catch(e){
-                            res(undefined);
+                        if(!auth_token_str){
+                            return res.sendStatus(500);
+                        }else{
+                            res.setHeader(authorization_header,auth_token_str);
+                            return res.sendStatus(201);
                         }
-                    });
-                    
-                    if(!auth_token_data){
-                        return res.sendStatus(401);
                     }else{
-                        //@ts-ignore
-                        req["auth_token_data"]=auth_token_data;
-                        return next();
+                        return res.sendStatus(401);
                     }
                 }
-            })
+            });
+    }
+
+    handle():Router{
+        this.router = Router();
+        try{
+            this._verifyOTPFormHandling();
+            this._signUpFormHandling();
+            this._mainAuthenticationHandling();
+            
         }catch(e){
             console.error(e);
             this.router.use((req,res)=>{
@@ -336,5 +404,83 @@ export class SignMeUpEngine<O extends FlattenObject, T extends FlattenObject>{
             })
         }
         return this.router;
+    }
+
+    private _mainAuthenticationHandling(){
+        this.router.use("/",async (req,res,next)=>{
+            //check if request has a authorization header, if not than simply return SVG
+            //along with header : captcha_token
+            //captcha_token will be jwt signed data:{salt captcha text, salt}
+            const auth_header = req.headers[authorization_header];
+            
+            //this check ensure only one auth header can be sent
+            const authHeaderType = Utils.toType(auth_header);
+            if(authHeaderType!=="array"){
+                return res.sendStatus(401);
+            }
+
+            if(!auth_header){
+                const svgData = svgCaptcha.create({
+                    size: this.signMeUpConfig.captcha_text_length,
+                    noise:this.signMeUpConfig.captcha_noise,
+                    color:false
+                });
+                //@ts-ignore
+                const captcha_token_data:SaltedData = this.create_a_salted_object(svgData.text,)
+                // captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
+                // captcha_token_data[this.captcha_text_key]=svgData.text;
+                // captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
+
+                const captcha_token=await new Promise<string>((res)=>{
+                    jwt.sign(captcha_token_data,this.CAPTCHA_TOKEN_SECRET,{algorithm:this.ALGORITHM,expiresIn: this.signMeUpConfig.captcha_expiry},(e,token)=>{
+                        if(e){
+                            res(undefined);
+                        }else{
+                            res(token);
+                        }
+                    })
+                });
+                if(!captcha_token){
+                    console.error("No captcha token created");
+                    return res.sendStatus(500);
+                }else{
+                    res.contentType("image/svg+xml");
+                    res.setHeader(captcha_token_header,captcha_token);
+                    return res.send(svgData.data);
+                }
+            }else{
+                const auth_token_data = await new Promise<AUTH_TOKEN>(res=>{
+                    try{
+                        jwt.verify(auth_header,this.AUTH_TOKEN_SECRET,{
+                            algorithms: [this.ALGORITHM],
+                        },(e,token)=>{
+                            if(e){
+                                res(undefined);
+                            }else{
+                                res(token as unknown as AUTH_TOKEN);
+                            }
+                        })
+                    }catch(e){
+                        res(undefined);
+                    }
+                });
+                
+                if(!auth_token_data){
+                    return res.sendStatus(401);
+                }else{
+                    //@ts-ignore
+                    req["auth_token_data"]=auth_token_data;
+                    return next();
+                }
+            }
+        });
+    }
+
+    private create_a_salted_object(textWhichNeedsSalting:string, max:number, min: number):SaltedData{
+        const result:SaltedData = {}
+        result[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max));
+        result[this.captcha_text_key]=textWhichNeedsSalting;
+        result[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max));
+        return result;
     }
 }
