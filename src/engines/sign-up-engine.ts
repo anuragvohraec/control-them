@@ -214,7 +214,7 @@ export class SignMeUpEngine{
                 const cap_header = req.headers[captcha_token_header];
 
                 const capHeaderType = Utils.toType(cap_header);
-                if(capHeaderType==="string"){
+                if(capHeaderType!=="string"){
                     return res.sendStatus(401);
                 }else{
                     if(typeof cap_header === "string"){
