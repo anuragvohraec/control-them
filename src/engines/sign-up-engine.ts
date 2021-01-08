@@ -376,7 +376,7 @@ export class SignMeUpEngine{
                             return res.sendStatus(500);
                         }else{
                             res.setHeader(authorization_header,auth_token_str);
-                            return res.sendStatus(201);
+                            return res.sendStatus(200);
                         }
                     }else{
                         return res.sendStatus(401);
