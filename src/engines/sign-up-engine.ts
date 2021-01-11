@@ -215,7 +215,7 @@ export class SignMeUpEngine{
 
                 const capHeaderType = Utils.toType(cap_header);
                 if(capHeaderType!=="string"){
-                    return res.sendStatus(401);
+                    return res.status(401).send({error:"No captcha_token header provided!"});
                 }else{
                     if(typeof cap_header === "string"){
                         //verify the token and than we will parse the request for sign up form
@@ -234,7 +234,7 @@ export class SignMeUpEngine{
                         });
                         
                         if(!captcha_token_sent){
-                            return res.sendStatus(401);    
+                            return res.status(401).send({error: "Invalid captcha_token provided!"});    
                         }else{
                             const captcha = captcha_token_sent[this.captcha_text_key];
                             
@@ -246,7 +246,7 @@ export class SignMeUpEngine{
                             //if captcha session already contains this , then reject the captcha.
                             if(this.captcha_session[captcha]){
                                 //too many request
-                                return res.sendStatus(409);
+                                return res.status(401).send({error:"Duplicate Captcha token used!"});
                             }else{
                                 this.captcha_session[captcha]=true;
                             }
@@ -255,7 +255,7 @@ export class SignMeUpEngine{
                             next();
                         }
                     }else{
-                        return res.sendStatus(401);
+                        return res.status(401).send({error:"Invalid captcha_token provided, can only be a string!"});
                     }
                 }
             });
@@ -269,7 +269,7 @@ export class SignMeUpEngine{
                 const captcha_sent = (req as any).captcha_sent;
                 const captcha_in_form = req.body["captcha"];
                 if(captcha_in_form!==captcha_sent){
-                    return res.sendStatus(401);
+                    return res.status(401).send({error:"User input invalid captcha solution!"});
                 }else{
                     //we will submit the form here
                     const otp_token = await this.signUpAndReturnOTPTokenObjectFunction(req.body, req);
@@ -290,13 +290,13 @@ export class SignMeUpEngine{
                             }
                         })
                         if(!otp_token_str){
-                            return res.sendStatus(500);
+                            return res.status(500).send({error:"Server failed to generate OTP token!"});
                         }else{
                             res.setHeader(otp_verification_header,otp_token_str);
                             return res.sendStatus(201);
                         }
                     }else{
-                        return res.sendStatus(401);
+                        return res.status(401).send({error: "Sign up form submitted has been rejected by the server!"});
                     }
                 }
             });
@@ -311,7 +311,7 @@ export class SignMeUpEngine{
 
                 const otpHeaderType = Utils.toType(otp_header);
                 if(otpHeaderType!=="string"){
-                    return res.sendStatus(401);
+                    return res.status(401).send({error:"No otp_token header provided!"});
                 }else{
                     if(typeof otp_header === "string"){
                         //verify the token and than we will parse the request for sign up form
@@ -330,7 +330,7 @@ export class SignMeUpEngine{
                         });
                         
                         if(!OTP_token_sent){
-                            return res.sendStatus(401);    
+                            return res.status(401).send({error:"Invalid OTP token provided!"});    
                         }else{
                             const otp = OTP_token_sent;
 
@@ -338,7 +338,7 @@ export class SignMeUpEngine{
                             next();
                         }
                     }else{
-                        return res.sendStatus(401);
+                        return res.status(401).send({error:"otp_token header muts only be string!"});
                     }
                 }
             });
@@ -352,7 +352,7 @@ export class SignMeUpEngine{
                 const otp_token:OTP = (req as any).otp_sent;
                 const otp_in_form = req.body["otp"];
                 if(otp_in_form!==otp_token[this.otp_text_key]){
-                    return res.sendStatus(401);
+                    return res.status(401).send("Invalid OTP entered by user!");
                 }else{
                     //we will submit the form here
                     const auth_token = await this.verifyOTPAndReturnAuthTokenObjectFunction(otp_token, req);
@@ -373,13 +373,13 @@ export class SignMeUpEngine{
                             }
                         })
                         if(!auth_token_str){
-                            return res.sendStatus(500);
+                            return res.status(500).send({error:"Server failed to generate authentication token for at the moment!"});
                         }else{
                             res.setHeader(authorization_header,auth_token_str);
                             return res.sendStatus(200);
                         }
                     }else{
-                        return res.sendStatus(401);
+                        return res.status(401).send({error: "OTP Form submitted by user has been rejected by the server!"});
                     }
                 }
             });
@@ -411,7 +411,7 @@ export class SignMeUpEngine{
             //this check ensure only one auth header can be sent
             const authHeaderType = Utils.toType(auth_header);
             if(authHeaderType==="array"){
-                return res.sendStatus(401);
+                return res.status(401).send({error:"Only on authorization header allowed!"});
             }
 
             if(!auth_header){
@@ -438,7 +438,7 @@ export class SignMeUpEngine{
                 });
                 if(!captcha_token){
                     console.error("No captcha token created");
-                    return res.sendStatus(500);
+                    return res.status(500).send({error: "Cannot create captcha at the moment!"});
                 }else{
                     res.contentType("image/svg+xml");
                     res.setHeader(captcha_token_header,captcha_token);
@@ -460,7 +460,7 @@ export class SignMeUpEngine{
                 });
                 
                 if(!auth_token_data){
-                    return res.sendStatus(401);
+                    return res.status(401).send({error:"Invalid Authentication token!"});
                 }else{
                     //@ts-ignore
                     req["auth_token_data"]=auth_token_data;
