@@ -26,13 +26,13 @@ import { Compass, PathDirection } from "./compass";
             this.router.use(async(req,res,next)=>{
                 const matchResult:PathDirection|undefined = this.compass.find(req.path);
                 if(!matchResult){
-                    return res.sendStatus(404);
+                    return res.status(404).send({error:"control-them!: No such path configured"});
                 }else{
                     const urlPermissions = this.controlThemPermissions[matchResult.matched_pattern];
                     const method: HTTPMethods=(req.method.toUpperCase() as HTTPMethods);
                     const methodPermissions= urlPermissions[method];
                     if(!methodPermissions){
-                        return res.sendStatus(405);
+                        return res.sendStatus(405).send({error:"control-them!: Method not allowed"});
                     }else{
                          //match number of query params supplied
                         const req_query_param_length=req.query?Object.keys(req.query).length:0;
@@ -88,7 +88,7 @@ import { Compass, PathDirection } from "./compass";
 
                         //verify request verifier
                         if((this.routerControlledRequestAuthenticator && !await this.routerControlledRequestAuthenticator(cont_req))||(methodPermissions.request_authenticator&& !await methodPermissions.request_authenticator(cont_req))){
-                            return res.sendStatus(401);
+                            return res.status(401).send({error:"control-them!: Authentication failed!"});
                         }
                     }   
                 }
@@ -98,7 +98,7 @@ import { Compass, PathDirection } from "./compass";
         }catch(e){
             console.error(e);
             this.router.use("/",(req,res)=>{
-                res.sendStatus(500);
+                res.status(500).send({error: "Server failed to configure control them!"});
             })
         }
         return this.router;
