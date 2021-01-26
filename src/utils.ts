@@ -1,4 +1,5 @@
 import { Condition, HttpHeader } from "./interfaces";
+import {Request} from 'express';
 
 export class Utils {
 
@@ -122,5 +123,23 @@ export class Utils {
             return {...p,...c};
         },{});
     }
+
+    /**
+     * if you have converted a request stream to JSON, use this method to convert it back to 
+     * @param req 
+     */
+    static async convertBackToEvent(req:Request){
+        if(req.body){
+          //remove listeners set by bodyParser
+          req.removeAllListeners('data');
+          req.removeAllListeners('end');
+      
+          return new Promise((res,rej)=>{
+            req.emit('data', JSON.stringify(req.body));
+            req.emit('end');
+            res();
+          });
+        }
+      } 
 }
 
