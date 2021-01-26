@@ -137,7 +137,7 @@ export class Utils {
           return new Promise((res,rej)=>{
             req.emit('data', JSON.stringify(req.body));
             req.emit('end');
-            res();
+            res(true);
           });
         }
       } 
