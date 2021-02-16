@@ -418,7 +418,8 @@ export class SignMeUpEngine{
                 const svgData = svgCaptcha.create({
                     size: this.signMeUpConfig.captcha_text_length,
                     noise:this.signMeUpConfig.captcha_noise,
-                    color:false
+                    color:false,
+                    ignoreChars: '0o1il'
                 });
                 //@ts-ignore
                 const captcha_token_data:SaltedData = this.create_a_salted_object(svgData.text,)
