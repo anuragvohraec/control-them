@@ -352,7 +352,7 @@ export class SignMeUpEngine{
                 const otp_token:OTP = (req as any).otp_sent;
                 const otp_in_form = req.body["otp"];
                 if(otp_in_form!==otp_token[this.otp_text_key]){
-                    return res.status(401).send("Invalid OTP entered by user!");
+                    return res.status(401).send({error: "Invalid OTP entered by user!"});
                 }else{
                     //we will submit the form here
                     const auth_token = await this.verifyOTPAndReturnAuthTokenObjectFunction(otp_token, req);
