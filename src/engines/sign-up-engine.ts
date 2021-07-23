@@ -375,6 +375,7 @@ export class SignMeUpEngine{
                         if(!auth_token_str){
                             return res.status(500).send({error:"Server failed to generate authentication token for at the moment!"});
                         }else{
+                            res.setHeader("uid",auth_token._id);
                             res.setHeader(authorization_header,auth_token_str);
                             return res.sendStatus(200);
                         }
