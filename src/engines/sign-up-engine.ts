@@ -135,6 +135,11 @@ export interface AUTH_TOKEN extends FlattenObject{
      * If its too difficult for you, use login datetime for this.
      */
     _rev:string;
+
+    /**
+     * Any extra headers that needs to be supplied, after sign in is done: Say firebase custom headers
+     */
+    headers?:Record<string,string>
 }
 
 /**
@@ -375,7 +380,12 @@ export class SignMeUpEngine{
                         if(!auth_token_str){
                             return res.status(500).send({error:"Server failed to generate authentication token for at the moment!"});
                         }else{
-                            res.setHeader("uid",auth_token._id);
+                            if(auth_token.headers){
+                                for(let h in auth_token.headers){
+                                    res.setHeader(h,auth_token.headers[h]);
+                                }
+                            }
+                            //res.setHeader("uid",auth_token._id);
                             res.setHeader(authorization_header,auth_token_str);
                             return res.sendStatus(200);
                         }
