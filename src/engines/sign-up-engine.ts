@@ -384,6 +384,7 @@ export class SignMeUpEngine{
                                 for(let h in auth_token.headers){
                                     res.setHeader(h,auth_token.headers[h]);
                                 }
+                                delete auth_token.headers;
                             }
                             //res.setHeader("uid",auth_token._id);
                             res.setHeader(authorization_header,auth_token_str);
