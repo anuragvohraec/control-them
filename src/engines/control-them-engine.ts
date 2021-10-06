@@ -57,10 +57,11 @@ import { Compass, PathDirection } from "./compass";
                         }
 
                         //match headers requirement
-                        const combined_headers: HttpHeader = Utils.combine_headers(this.router_minimum_expected_headers||{}, methodPermissions.minimum_expected_headers||{});
-                        const h_keys = Object.keys(combined_headers);
+                        const combined_expected_headers: HttpHeader = Utils.combine_headers(this.router_minimum_expected_headers||{}, methodPermissions.minimum_expected_headers||{});
+                        const h_keys = Object.keys(combined_expected_headers);
+                        let headers:HttpHeader ={};
                         for(let h of h_keys){
-                            const condition:Condition = combined_headers[h];
+                            const condition:Condition = combined_expected_headers[h];
                             const req_header_value=req.headers[h];
                             if(!req_header_value){
                                 return res.status(400).send({error:`Not all request headers supplied: ${h_keys}`}); 
@@ -73,6 +74,8 @@ import { Compass, PathDirection } from "./compass";
                                         c=`{$regex: ${condition[op].toString()}}`;
                                     }
                                     return res.status(400).send({error:`Header ${h} value should be ${c}`}); 
+                                }else{
+                                    headers[h]=req_header_value;
                                 }
                             }
                         }
@@ -82,7 +85,7 @@ import { Compass, PathDirection } from "./compass";
                         cont_req.control_them_info={
                             method,
                             path_direction:matchResult,
-                            headers:combined_headers,
+                            headers,
                             query_params:req.query
                         }
 

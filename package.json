@@ -1,6 +1,6 @@
 {
   "name": "control-them",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Controls if an HTTP request should be allowed to be passed to next set of routers.",
   "main": "dist/index.js",
   "scripts": {
