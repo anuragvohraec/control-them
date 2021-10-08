@@ -80,7 +80,6 @@ import { Compass, PathDirection } from "./compass";
                             }
                         }
 
-                        //@ts-ignore
                         const cont_req:ControlledRequest = (req as ControlledRequest);
                         cont_req.control_them_info={
                             method,

@@ -1,5 +1,6 @@
 
 import { PathDirection } from "./engines/compass";
+import {Request} from 'express';
 
 //Have to add $in
 export type ConditionalOperator = "$lt"|"$lte"|"$eq"|"$neq"|"$gte"|"$gt"|"$exists"|"$within"|"$nwithin"|"$regex"|"$in"|"$nin";
@@ -45,7 +46,7 @@ export interface HttpHeader{
     [key:string]:any
 }
 
-export interface ControlledRequest extends Express.Request{
+export interface ControlledRequest extends Request{
     control_them_info:{
         method: HTTPMethods;
         path_direction:PathDirection;
