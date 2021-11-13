@@ -4,6 +4,9 @@ Contains two modules:
 2. SignMeUpEngine: for JWT sign up process.
 
 # Version
+## 2.0.4
+1. Exposed JWT sign method
+
 ## 2.0.3
 1. Bug fix: Correct Control request , its an extension of express Request Object
 
