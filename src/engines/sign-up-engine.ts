@@ -307,6 +307,25 @@ export class SignMeUpEngine{
             });
     }
 
+    public async signUpToken(auth_token:AUTH_TOKEN,expiryIn:string | number | undefined){
+        const auth_token_str = await new Promise<string|undefined>(res=>{
+            try{
+                jwt.sign(auth_token,this.AUTH_TOKEN_SECRET,{
+                    expiresIn: expiryIn
+                },(e,token)=>{
+                    if(e){
+                        res(undefined);
+                    }else{
+                        res(token);
+                    }
+                });
+            }catch(e){
+                res(undefined);
+            }
+        });
+        return auth_token_str;
+    }
+
     private _verifyOTPFormHandling(){
         //SIGN UP FORM handling
             //this checks if valid captcha token is present or not , else will reject the request.
