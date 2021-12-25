@@ -29,9 +29,9 @@ export class Rando{
 
 }
 
-const captcha_token_header="captcha_token"
+const captcha_token_header="captchatoken"
 const authorization_header="authorization";
-const otp_verification_header="otp_token";
+const otp_verification_header="otptoken";
 
 export interface SignMeUpConfig{
     /**
