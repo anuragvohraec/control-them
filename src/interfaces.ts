@@ -58,3 +58,9 @@ export interface ControlledRequest extends Request{
 export interface ControlledRequestAuthenticator{
     (control_req:ControlledRequest):Promise<boolean>;
 }
+
+export class SignUpConstants{
+    static readonly auth_token_data="auth_token_data";
+    static readonly SALT1_KEY="s1";
+    static readonly SALT2_KEY="s2";
+}

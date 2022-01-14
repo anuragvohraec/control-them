@@ -1,5 +1,6 @@
 import { Condition, HttpHeader } from "./interfaces";
 import {Request} from 'express';
+import crypto from 'crypto';
 
 export class Utils {
 
@@ -140,6 +141,30 @@ export class Utils {
             res(true);
           });
         }
-      } 
+    }
+    
+    static random_string(length:number) {
+        let result           = '';
+        const characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
+        const charactersLength = characters.length;
+        for ( var i = 0; i < length; i++ ) {
+           result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+     }
+
+    public static random_id({seed,hash}:{seed?:string,hash?:string}){
+        let t = this.random_string(10)+`${Date.now}`;
+        t = seed?t+seed:t;
+        const sha1 = crypto.createHash(hash??'sha256');
+        sha1.update(t);
+        return sha1.digest('hex');
+    }
+
+    public static hashSomeString({input,hash="sha256"}:{input:string,hash?:string}):string{
+        const sha1 = crypto.createHash(hash);
+        sha1.update(input);
+        return sha1.digest('hex');
+    }
 }
 

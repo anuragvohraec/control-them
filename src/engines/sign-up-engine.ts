@@ -2,10 +2,10 @@ import { Router, json,Request , Response} from "express";
 import * as svgCaptcha from 'svg-captcha';
 import * as jwt from 'jsonwebtoken';
 import { Utils } from "../utils";
-import {FlattenObject} from '../interfaces';
+import {FlattenObject, SignUpConstants} from '../interfaces';
 
 interface SaltedData{
-    [key:string]:string;
+    [key:string]:string|number;
 }
 
 export class Rando{
@@ -241,7 +241,9 @@ export class SignMeUpEngine{
                         if(!captcha_token_sent){
                             return res.status(401).send({error: "Invalid captcha_token provided!"});    
                         }else{
-                            const captcha = captcha_token_sent[this.captcha_text_key];
+                            let salt1 =captcha_token_sent[SignUpConstants.SALT1_KEY];
+                            let salt2 =captcha_token_sent[SignUpConstants.SALT2_KEY];
+                            const captchaHash = captcha_token_sent[this.captcha_text_key];
                             
                             //refreshes captcha sessions if maximum size is reached
                             if(this.captcha_verified>this.signMeUpConfig.max_captcha_session_size!){
@@ -249,14 +251,14 @@ export class SignMeUpEngine{
                                 this.captcha_session={};
                             }
                             //if captcha session already contains this , then reject the captcha.
-                            if(this.captcha_session[captcha]){
+                            if(this.captcha_session[captchaHash]){
                                 //too many request
                                 return res.status(401).send({error:"Duplicate Captcha token used!"});
                             }else{
-                                this.captcha_session[captcha]=true;
+                                this.captcha_session[captchaHash]=true;
                             }
 
-                            (req as any).captcha_sent = captcha;
+                            (req as any).captcha_info_from_token = {captchaHash,salt1,salt2};
                             next();
                         }
                     }else{
@@ -271,17 +273,20 @@ export class SignMeUpEngine{
 
             this.router.post(this.signMeUpConfig.sign_me_up_path!,async (req,res,next)=>{
                 //here we will verify if the captcha text supplied is correct or not.
-                const captcha_sent = (req as any).captcha_sent;
+                const{captchaHash,salt1,salt2} = (req as any).captcha_info_from_token as {captchaHash:string,salt1:string,salt2:string};
                 const captcha_in_form = req.body["captcha"];
-                if(captcha_in_form!==captcha_sent){
+                if(!(captchaHash && salt1 && salt2) ||captchaHash!==Utils.hashSomeString({input:salt1+captcha_in_form+salt2})){
                     return res.status(401).send({error:"User input invalid captcha solution!"});
                 }else{
                     //we will submit the form here
-                    const otp_token = await this.signUpAndReturnOTPTokenObjectFunction(req.body, req);
+                    let otp_token = await this.signUpAndReturnOTPTokenObjectFunction(req.body, req);
                     if(otp_token){
+                        let saltedObject = this.create_a_salted_object(otp_token[this.otp_text_key],this.otp_text_key);
+                        otp_token={...otp_token,...saltedObject};
+
                         const otp_token_str = await new Promise<string|undefined>(res=>{
                             try{
-                                jwt.sign(otp_token,this.OTP_TOKEN_SECRET,{
+                                jwt.sign(otp_token!,this.OTP_TOKEN_SECRET,{
                                     expiresIn: this.signMeUpConfig.otp_token_expiry
                                 },(e,token)=>{
                                     if(e){
@@ -356,9 +361,7 @@ export class SignMeUpEngine{
                         if(!OTP_token_sent){
                             return res.status(401).send({error:"Invalid OTP token provided!"});    
                         }else{
-                            const otp = OTP_token_sent;
-
-                            (req as any).otp_sent = otp;
+                            (req as any).otp_header_received = OTP_token_sent;
                             next();
                         }
                     }else{
@@ -373,9 +376,13 @@ export class SignMeUpEngine{
 
             this.router.post(this.signMeUpConfig.verify_otp_path!,async (req,res,next)=>{
                 //here we will verify if the captcha text supplied is correct or not.
-                const otp_token:OTP = (req as any).otp_sent;
+                const otp_token:any = (req as any).otp_header_received;
+                const salt1 = otp_token[SignUpConstants.SALT1_KEY];
+                const salt2 = otp_token[SignUpConstants.SALT2_KEY];
+                const otpHash=otp_token[this.otp_text_key];
+
                 const otp_in_form = req.body["otp"];
-                if(otp_in_form!==otp_token[this.otp_text_key]){
+                if(!(salt1 && salt2 && otpHash)||Utils.hashSomeString({input:salt1+otp_in_form+salt2})!==otpHash){
                     return res.status(401).send({error: "Invalid OTP entered by user!"});
                 }else{
                     //we will submit the form here
@@ -442,7 +449,7 @@ export class SignMeUpEngine{
             //this check ensure only one auth header can be sent
             const authHeaderType = Utils.toType(auth_header);
             if(authHeaderType==="array"){
-                return res.status(401).send({error:"Only on authorization header allowed!"});
+                return res.status(401).send({error:"Only one authorization header allowed!"});
             }
 
             if(!auth_header){
@@ -450,13 +457,10 @@ export class SignMeUpEngine{
                     size: this.signMeUpConfig.captcha_text_length,
                     noise:this.signMeUpConfig.captcha_noise,
                     color:false,
-                    ignoreChars: '0o1il'
+                    ignoreChars: '0o1Il'
                 });
-                //@ts-ignore
-                const captcha_token_data:SaltedData = this.create_a_salted_object(svgData.text,)
-                // captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
-                // captcha_token_data[this.captcha_text_key]=svgData.text;
-                // captcha_token_data[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(this.signMeUpConfig.captcha_salt_range_length!.min,this.signMeUpConfig.captcha_salt_range_length!.max));
+                
+                const captcha_token_data:SaltedData = this.create_a_salted_object(svgData.text,this.captcha_text_key);    
 
                 const captcha_token=await new Promise<string|undefined>((res)=>{
                     jwt.sign(captcha_token_data,this.CAPTCHA_TOKEN_SECRET,{expiresIn: this.signMeUpConfig.captcha_expiry},(e,token)=>{
@@ -495,18 +499,23 @@ export class SignMeUpEngine{
                     return res.status(401).send({error:"Invalid Authentication token!"});
                 }else{
                     //@ts-ignore
-                    req["auth_token_data"]=auth_token_data;
+                    req[SignUpConstants.auth_token_data]=auth_token_data;
                     return next();
                 }
             }
         });
     }
 
-    private create_a_salted_object(textWhichNeedsSalting:string, max:number, min: number):SaltedData{
-        const result:SaltedData = {}
-        result[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max));
-        result[this.captcha_text_key]=textWhichNeedsSalting;
-        result[this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max))]=this.signMeUpConfig.rando!.random_string(this.signMeUpConfig.rando!.random_number_between(min,max));
+    private create_a_salted_object(textWhichNeedsSalting:string,key:string):SaltedData{
+        const result:SaltedData = {};
+        
+        let salt1 = Utils.random_id({});
+        let salt2 = Utils.random_id({});
+        result[SignUpConstants.SALT1_KEY]=salt1;
+        result[SignUpConstants.SALT2_KEY]=salt2;
+        
+        let input = salt1+textWhichNeedsSalting+salt2;
+        result[key]=Utils.hashSomeString({input});
         return result;
     }
 }
