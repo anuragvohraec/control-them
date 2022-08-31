@@ -32,7 +32,8 @@ import { Compass, PathDirection } from "./compass";
                     const method: HTTPMethods=(req.method.toUpperCase() as HTTPMethods);
                     const methodPermissions= urlPermissions[method];
                     if(!methodPermissions){
-                        return res.sendStatus(405).send({error:"control-them!: Method not allowed"});
+                        res.status(405);
+                        return res.send({error:"control-them!: Method not allowed"});
                     }else{
                          //match number of query params supplied
                         const req_query_param_length=req.query?Object.keys(req.query).length:0;
